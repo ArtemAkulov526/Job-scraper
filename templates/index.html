@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Вакансії</title>
+</head>
+<body>
+    <h1>Вакансії</h1>
+    
+    {% if jobs %}
+        <ul>
+            {% for job in jobs %}
+                <li>
+                    <a href="{{ job.url }}" target="_blank"><strong>{{ job.title }}</strong></a><br>
+                    <strong>Зарплата:</strong> {{ job.salary }}<br>
+                    <strong>Умови:</strong> {{ job.details }}<br>
+                    <strong>Опис:</strong> {{ job.description }}<br>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>Немає вакансій.</p>
+    {% endif %}
+
+</body>
+</html>
