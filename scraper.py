@@ -17,7 +17,7 @@ def get_jobs_djinni():
     for row in job.find_all('li', attrs={'class': 'mb-4'}):
         job_data = {
             "title": row.find("a", class_="job-item__title-link").text.strip() if row.find("a", class_="job-item__title-link") else "No Title",
-            "salary": row.find("span", class_="text-success text-nowrap").text.strip() if row.find("span", class_="text-success text-nowrap") else "Не вказана",
+            "salary": row.find("span", class_="text-success text-nowrap").text.strip() if row.find("span", class_="text-success text-nowrap") else "No salary provided",
             "url": row.find("h2").find("a")["href"] if row.find("h2") and row.find("h2").find("a") else "No URL",
             "details": ", ".join([span.text.strip() for span in row.find_all("span", class_="text-nowrap")]) if row.find("span", class_="text-nowrap") else "No details",
             "description": row.find("span", class_="js-truncated-text").text.strip() if row.find("span", class_="js-truncated-text") else "No description"
@@ -37,7 +37,7 @@ def get_jobs_djinni():
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            print(f"⚠️ Database error: {e}")
+            print(f" Database error: {e}")
 
 if __name__ == "__main__":
     get_jobs_djinni()  
