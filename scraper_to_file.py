@@ -34,9 +34,45 @@ def get_jobs_djinni():
 
     print(f"Saved {len(arr)} job listings from Djinni to {OUTPUT_FILE}")
 
+def get_jobs_work_ua():
+    URL = "https://www.work.ua/jobs-remote-junior+python+developer/"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
+
+    r = requests.get(url=URL, headers=headers)
+    soup = BeautifulSoup(r.content, 'html5lib')
+    job = soup.find('div', attrs={'id': 'pjax-jobs-list'})
+    
+    jobs = []
+    for row in job.find_all('div', attrs={'class': 'job-link'}):
+        job_data = {
+            "title": row.find("h2", class_="my-0").text.strip() if row.find("h2", class_="my-0") else "No Title",
+            "salary": row.find("span", class_="strong-600").text.strip() if row.find("span", class_="strong-600") else "No salary provided",
+            "url": "https://work.ua" + row.find("h2").find("a")["href"] if row.find("h2") and row.find("h2").find("a") else "No URL",
+            "details": ", ".join([span.text.strip() for span in row.find_all("span", class_="mt-xs")]) if row.find("span", class_="mt-xs") else "No details",
+            "description": row.find("p", class_="ellipsis ellipsis-line ellipsis-line-3 text-default-7 mb-0").text.strip() if row.find("p", class_="ellipsis ellipsis-line ellipsis-line-3 text-default-7 mb-0") else "No description"
+        }
+        
+        jobs.append(job_data)
+
+    OUTPUT_FILE = 'jobs.txt'
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+        for job in jobs:
+            f.write(f"Title: {job['title']}\n")
+            f.write(f"Salary: {job['salary']}\n")
+            f.write(f"URL: {job['url']}\n")
+            f.write(f"Details: {job['details']}\n")
+            f.write(f"Description: {job['description']}\n")
+            f.write("-" * 40 + "\n")
+    
+    print(f"Saved {len(jobs)} job listings from work.ua to {OUTPUT_FILE}")
+
+
 
 if __name__ == "__main__":
     get_jobs_djinni()
+    get_jobs_work_ua()
 
 
 
