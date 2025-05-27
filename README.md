@@ -1,7 +1,7 @@
 Job scraper
 
 Tech stack: 
-Flask, BeautifulSoup, PostgreSQL, SQLAlchemy, HTML
+Flask, BeautifulSoup, PostgreSQL, SQLAlchemy, HTML, asyncio, aiohttp
 
 Description:
 A web scraper that collects job postings and displays them on a website.
