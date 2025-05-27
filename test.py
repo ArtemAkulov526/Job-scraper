@@ -1,9 +1,9 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from scraper import get_jobs_work_ua  # replace with your actual import
+from scraper import get_jobs_work_ua  
 from models import JobPosting
 
-# Sample minimal HTML to simulate the real page structure
+
 SAMPLE_HTML = """
 <div id="pjax-jobs-list">
     <div class="job-link">
@@ -32,7 +32,6 @@ def mock_db_session():
 @pytest.fixture
 def mock_job_query():
     with patch("your_module.JobPosting.query") as mock_query:
-        # filter_by(url=...) returns mock_query again for chaining .first()
         mock_query.filter_by.return_value.first.return_value = None
         yield mock_query
 
@@ -46,14 +45,10 @@ def mock_app_context():
 def test_get_jobs_work_ua(mock_requests_get, mock_db_session, mock_job_query, mock_app_context):
     get_jobs_work_ua()
     
-    # It should call requests.get with the expected URL and headers
     mock_requests_get.assert_called_once()
     
-    # It should query the database for the job URL
     mock_job_query.filter_by.assert_called_once_with(url="https://work.ua/job/123")
     
-    # It should add the new job to the session
     assert mock_db_session.add.called
     
-    # It should commit the session
     assert mock_db_session.commit.called
