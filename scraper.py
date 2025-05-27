@@ -17,8 +17,8 @@ async def get_jobs_djinni():
     async with aiohttp.ClientSession() as session:
         html = await fetch(session, URL, headers)
     
-    soup = BeautifulSoup(html.content, 'html5lib')
-    job = soup.find('main', attrs={'class': 'list-unstyled list-jobs mb-4'})
+    soup = BeautifulSoup(html, 'html5lib')
+    job = soup.find('main', attrs={'id': 'jobs_main'})
     
     jobs = []
     for row in job.find_all('li', attrs={'class': 'mb-4'}):
@@ -31,10 +31,12 @@ async def get_jobs_djinni():
             "description": row.find("span", class_="js-truncated-text").text.strip() if row.find("span", class_="js-truncated-text") else "No description"
         }
         jobs.append(job_data)
+    print(f"Scraped {len(jobs)} jobs")
 
     
     with app.app_context():
         for job_data in jobs:
+            print(f"Checking job: {job_data['url']}")
             existing_job = JobPosting.query.filter_by(url=job_data["url"]).first()
             if not existing_job:
                 job = JobPosting(**job_data)
@@ -56,7 +58,7 @@ async def get_jobs_work_ua():
     async with aiohttp.ClientSession() as session:
         html = await fetch(session, URL, headers)
     
-    soup = BeautifulSoup(html.content, 'html5lib')
+    soup = BeautifulSoup(html, 'html5lib')
     job = soup.find('div', attrs={'id': 'pjax-jobs-list'})
     
     jobs = []
@@ -70,9 +72,11 @@ async def get_jobs_work_ua():
         }
         
         jobs.append(job_data)
+    print(f"Scraped {len(jobs)} jobs")
 
     with app.app_context():
         for job_data in jobs:
+            print(f"Checking job: {job_data['url']}")
             existing_job = JobPosting.query.filter_by(url=job_data["url"]).first()
             if not existing_job:
                 job = JobPosting(**job_data)
@@ -88,10 +92,9 @@ async def get_jobs_work_ua():
 
 async def main():
     await asyncio.gather(
-        get_jobs_djinni,
-        get_jobs_work_ua
+        get_jobs_djinni(),
+        get_jobs_work_ua(),
         )
 
-
-    if __name__ == "__main__":
-        asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
