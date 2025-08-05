@@ -10,6 +10,20 @@ async def fetch(session, url, headers):
     async with session.get(url, headers=headers) as response:
         return await response.text()
 
+def save_jobs_to_db(jobs):
+    with app.app_context():
+        for job_data in jobs:
+            print(f"Checking job: {job_data['url']}")
+            if not JobPosting.query.filter_by(url=job_data["url"]).first():
+                job = JobPosting(**job_data)
+                db.session.add(job)
+                print(f"Added job: {job.title}")
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f" Database error: {e}")
+
 async def get_jobs_djinni():
     URL = "https://djinni.co/jobs/?primary_keyword=Python&exp_level=no_exp"
 
@@ -18,6 +32,9 @@ async def get_jobs_djinni():
     
     soup = BeautifulSoup(html, 'html5lib')
     job = soup.find('main', attrs={'id': 'jobs_main'})
+    if not job:
+        print("Djinni main block not found")
+        return []
     
     jobs = []
     for row in job.find_all('li', attrs={'class': 'mb-4'}):
@@ -31,31 +48,19 @@ async def get_jobs_djinni():
         }
         jobs.append(job_data)
     print(f"Scraped {len(jobs)} jobs")
-
-    
-    with app.app_context():
-        for job_data in jobs:
-            print(f"Checking job: {job_data['url']}")
-            existing_job = JobPosting.query.filter_by(url=job_data["url"]).first()
-            if not existing_job:
-                job = JobPosting(**job_data)
-                db.session.add(job)
-                print(f"Added job: {job.title}")
-
-        try:
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            print(f" Database error: {e}")
+    return jobs
 
 async def get_jobs_work_ua():
     URL = "https://www.work.ua/jobs-remote-junior+python+developer/"
-    
+
     async with aiohttp.ClientSession() as session:
         html = await fetch(session, URL, headers=HEADERS)
     
     soup = BeautifulSoup(html, 'html5lib')
     job = soup.find('div', attrs={'id': 'pjax-jobs-list'})
+    if not job:
+        print(" Work.ua main block not found")
+        return []
     
     jobs = []
     for row in job.find_all('div', attrs={'class': 'job-link'}):
@@ -69,21 +74,8 @@ async def get_jobs_work_ua():
         
         jobs.append(job_data)
     print(f"Scraped {len(jobs)} jobs")
+    return jobs
 
-    with app.app_context():
-        for job_data in jobs:
-            print(f"Checking job: {job_data['url']}")
-            existing_job = JobPosting.query.filter_by(url=job_data["url"]).first()
-            if not existing_job:
-                job = JobPosting(**job_data)
-                db.session.add(job)
-                print(f"Added job: {job.title}")
-
-        try:
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            print(f" Database error: {e}")
 
 async def get_jobs_robota_ua():
     url = "https://robota.ua/zapros/python/ukraine/params;scheduleIds=3;experienceType=true"
@@ -123,33 +115,20 @@ async def get_jobs_robota_ua():
             "details": ", ".join(span.text.strip() for span in block.select("span.ng-star-inserted")[1:]) or "No details",
         })
 
-        await browser.close()
-
-        with app.app_context():
-            for job_data in jobs:
-                print(f"Checking job: {job_data['url']}")
-            existing_job = JobPosting.query.filter_by(url=job_data["url"]).first()
-            if not existing_job:
-                job = JobPosting(**job_data)
-                db.session.add(job)
-                print(f"Added job: {job.title}")
-
-        try:
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            print(f" Database error: {e}")
-
-
+    return jobs
 
 async def main():
     start = time.perf_counter()
 
-    await asyncio.gather(
+    djinni_jobs, work_ua_jobs, robota_jobs = await asyncio.gather(
         get_jobs_djinni(),
         get_jobs_work_ua(),
         get_jobs_robota_ua()
-        )
+    )
+
+    save_jobs_to_db(djinni_jobs)
+    save_jobs_to_db(work_ua_jobs)
+    save_jobs_to_db(robota_jobs)
     
     end = time.perf_counter()
     print(f"⏱️ Async version completed in {end - start:.2f} seconds")
