@@ -1,8 +1,10 @@
-import asyncio
-import aiohttp
+import asyncio, aiohttp, time
 from bs4 import BeautifulSoup
 from models import db, JobPosting
+from playwright.async_api import async_playwright
 from app import app  
+
+HEADERS = {'User-Agent': "Mozilla/5.0 (X11; CrOS x86_64 8172.45.0)"}
 
 async def fetch(session, url, headers):
     async with session.get(url, headers=headers) as response:
@@ -10,12 +12,9 @@ async def fetch(session, url, headers):
 
 async def get_jobs_djinni():
     URL = "https://djinni.co/jobs/?primary_keyword=Python&exp_level=no_exp"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (X11; CrOS x86_64 8172.45.0)"
-    }
 
     async with aiohttp.ClientSession() as session:
-        html = await fetch(session, URL, headers)
+        html = await fetch(session, URL, headers=HEADERS)
     
     soup = BeautifulSoup(html, 'html5lib')
     job = soup.find('main', attrs={'id': 'jobs_main'})
@@ -51,12 +50,9 @@ async def get_jobs_djinni():
 
 async def get_jobs_work_ua():
     URL = "https://www.work.ua/jobs-remote-junior+python+developer/"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-    }
-
+    
     async with aiohttp.ClientSession() as session:
-        html = await fetch(session, URL, headers)
+        html = await fetch(session, URL, headers=HEADERS)
     
     soup = BeautifulSoup(html, 'html5lib')
     job = soup.find('div', attrs={'id': 'pjax-jobs-list'})
@@ -89,12 +85,74 @@ async def get_jobs_work_ua():
             db.session.rollback()
             print(f" Database error: {e}")
 
+async def get_jobs_robota_ua():
+    url = "https://robota.ua/zapros/python/ukraine/params;scheduleIds=3;experienceType=true"
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+        await page.set_extra_http_headers(HEADERS)
+        await page.goto(url)
+
+        previous_height = 0
+        for _ in range(5):
+            await page.mouse.wheel(0, 2000)
+            await page.wait_for_timeout(1000)
+            current_height = await page.evaluate("() => document.body.scrollHeight")
+            if current_height == previous_height:
+                break
+            previous_height = current_height
+
+        await page.wait_for_selector("div.santa--mb-20", timeout=10000)
+        content = await page.content()
+        await browser.close()
+
+    soup = BeautifulSoup(content, "html.parser")
+    job_blocks = soup.select("div.santa--mb-20.ng-star-inserted")
+
+    jobs = []
+    for block in job_blocks:
+        title = block.select_one("h2.santa-typo-h3")
+        salary = block.select_one("span.ng-star-inserted")
+        url_tag = block.select_one("a.card")
+
+        jobs.append({
+            "title": title.text.strip() if title else "No title",
+            "salary": salary.text.strip() if salary else "No salary",
+            "url": "https://robota.ua" + url_tag["href"] if url_tag and url_tag.has_attr("href") else "No URL",
+            "details": ", ".join(span.text.strip() for span in block.select("span.ng-star-inserted")[1:]) or "No details",
+        })
+
+        await browser.close()
+
+        with app.app_context():
+            for job_data in jobs:
+                print(f"Checking job: {job_data['url']}")
+            existing_job = JobPosting.query.filter_by(url=job_data["url"]).first()
+            if not existing_job:
+                job = JobPosting(**job_data)
+                db.session.add(job)
+                print(f"Added job: {job.title}")
+
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f" Database error: {e}")
+
+
 
 async def main():
+    start = time.perf_counter()
+
     await asyncio.gather(
         get_jobs_djinni(),
         get_jobs_work_ua(),
+        get_jobs_robota_ua()
         )
+    
+    end = time.perf_counter()
+    print(f"⏱️ Async version completed in {end - start:.2f} seconds")
 
 if __name__ == "__main__":
     asyncio.run(main())

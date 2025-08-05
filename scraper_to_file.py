@@ -1,79 +1,114 @@
-import requests
+import requests, time, asyncio
 from bs4 import BeautifulSoup
+from playwright.async_api import async_playwright
 
-def get_jobs_djinni():
-    URL = "https://djinni.co/jobs/?primary_keyword=Python&exp_level=no_exp"
-    OUTPUT_FILE = "jobs_junior.txt"
-    headers = {'User-Agent':"Mozilla/5.0 (X11; CrOS x86_64 8172.45.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.64 Safari/537.36"}
+OUTPUT_FILE = "test.txt"
+HEADERS = {'User-Agent': "Mozilla/5.0 (X11; CrOS x86_64 8172.45.0)"}
 
-
-    r=requests.get(url=URL, headers=headers)
-    soup = BeautifulSoup(r.content, 'html5lib')
-    arr = []
-    job = soup.find('main', attrs={'id':'jobs_main'})
-
-    for row in job.find_all('li', attrs={'class':'mb-4'}):
-
-        jobs = {}
-        jobs['title'] = row.find("a", class_="job-item__title-link").text.strip() if row.find("a", class_="job-item__title-link") else "No Title"
-        jobs['salary'] = row.find("span", class_="text-success text-nowrap").text.strip() if row.find("span", class_="text-success text-nowrap") else "No salary expectations provided"
-        jobs['url'] = row.h2.find("a")["href"]
-        jobs['details'] = ", ".join([span.text.strip() for span in row.find_all("span", class_="text-nowrap")]) if row.find("span", class_="text-nowrap") else "No details"
-        jobs['description'] = row.find("span", class_="js-truncated-text").text.strip() if row.find("span", class_="js-truncated-text") else "No description"
-        arr.append(jobs)
-
-
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as file:
-        for job in arr:
-            file.write(f"Title: {job['title']}\n")
-            file.write(f"Salary: {job['salary']}\n")
-            file.write(f"URL: https://djinni.co{job['url']}\n")
-            file.write(f"Details: {job['details']}\n")
-            file.write(f"Description: {job['description']}\n")
-            file.write("-" * 40 + "\n")  
-
-    print(f"Saved {len(arr)} job listings from Djinni to {OUTPUT_FILE}")
-
-def get_jobs_work_ua():
-    URL = "https://www.work.ua/jobs-remote-junior+python+developer/"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-    }
-
-    r = requests.get(url=URL, headers=headers)
-    soup = BeautifulSoup(r.content, 'html5lib')
-    job = soup.find('div', attrs={'id': 'pjax-jobs-list'})
-    
-    jobs = []
-    for row in job.find_all('div', attrs={'class': 'job-link'}):
-        job_data = {
-            "title": row.find("h2", class_="my-0").text.strip() if row.find("h2", class_="my-0") else "No Title",
-            "salary": row.find("span", class_="strong-600").text.strip() if row.find("span", class_="strong-600") else "No salary provided",
-            "url": "https://work.ua" + row.find("h2").find("a")["href"] if row.find("h2") and row.find("h2").find("a") else "No URL",
-            "details": ", ".join([span.text.strip() for span in row.find_all("span", class_="mt-xs")]) if row.find("span", class_="mt-xs") else "No details",
-            "description": row.find("p", class_="ellipsis ellipsis-line ellipsis-line-3 text-default-7 mb-0").text.strip() if row.find("p", class_="ellipsis ellipsis-line ellipsis-line-3 text-default-7 mb-0") else "No description"
-        }
-        
-        jobs.append(job_data)
-
-    OUTPUT_FILE = 'jobs.txt'
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+def save_jobs(jobs: list, source: str, mode: str = "a"):
+    with open(OUTPUT_FILE, mode, encoding="utf-8") as f:
         for job in jobs:
-            f.write(f"Title: {job['title']}\n")
-            f.write(f"Salary: {job['salary']}\n")
-            f.write(f"URL: {job['url']}\n")
-            f.write(f"Details: {job['details']}\n")
-            f.write(f"Description: {job['description']}\n")
+            f.write(f"Title: {job.get('title')}\n")
+            f.write(f"Salary: {job.get('salary')}\n")
+            f.write(f"URL: {job.get('url')}\n")
+            if job.get('details'):
+                f.write(f"Details: {job.get('details')}\n")
+            if job.get('description'):
+                f.write(f"Description: {job.get('description')}\n")
+            f.write(f"Found on: {source}\n")
             f.write("-" * 40 + "\n")
-    
-    print(f"Saved {len(jobs)} job listings from work.ua to {OUTPUT_FILE}")
+    print(f" Saved {len(jobs)} jobs from {source}")
 
+
+def scrape_djinni():
+    url = "https://djinni.co/jobs/?primary_keyword=Python&exp_level=no_exp"
+    r = requests.get(url=url, headers=HEADERS)
+    soup = BeautifulSoup(r.content, 'html5lib')
+
+    jobs = []
+    for row in soup.select("main#jobs_main li.mb-4"):
+        jobs.append({
+            "title": row.select_one("a.job-item__title-link").text.strip() if row.select_one("a.job-item__title-link") else "No Title",
+            "salary": row.select_one("span.text-success.text-nowrap").text.strip() if row.select_one("span.text-success.text-nowrap") else "No salary",
+            "url": "https://djinni.co" + row.h2.find("a")["href"],
+            "details": ", ".join(span.text.strip() for span in row.select("span.text-nowrap")) or "No details",
+            "description": row.select_one("span.js-truncated-text").text.strip() if row.select_one("span.js-truncated-text") else "No description"
+        })
+
+    save_jobs(jobs, source="Djinni", mode="w")
+
+
+def scrape_work_ua():
+    url = "https://www.work.ua/jobs-remote-junior+python+developer/"
+    r = requests.get(url=url, headers=HEADERS)
+    soup = BeautifulSoup(r.content, 'html5lib')
+
+    job_blocks = soup.select("div#pjax-jobs-list div.job-link")
+
+    jobs = []
+    for block in job_blocks:
+        jobs.append({
+            "title": block.select_one("h2.my-0").text.strip() if block.select_one("h2.my-0") else "No Title",
+            "salary": block.select_one("span.strong-600").text.strip() if block.select_one("span.strong-600") else "No salary",
+            "url": "https://work.ua" + block.find("a")["href"],
+            "details": ", ".join(span.text.strip() for span in block.select("span.mt-xs")) or "No details",
+            "description": block.select_one("p.ellipsis-line-3").text.strip() if block.select_one("p.ellipsis-line-3") else "No description"
+        })
+
+    save_jobs(jobs, source="Work.ua")
+
+
+async def scrape_robota_ua():
+    url = "https://robota.ua/zapros/python/ukraine/params;scheduleIds=3;experienceType=true"
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+        await page.set_extra_http_headers(HEADERS)
+        await page.goto(url)
+
+        previous_height = 0
+        for _ in range(5):
+            await page.mouse.wheel(0, 2000)
+            await page.wait_for_timeout(1000)
+            current_height = await page.evaluate("() => document.body.scrollHeight")
+            if current_height == previous_height:
+                break
+            previous_height = current_height
+
+        await page.wait_for_selector("div.santa--mb-20", timeout=10000)
+        content = await page.content()
+        await browser.close()
+
+    soup = BeautifulSoup(content, "html.parser")
+    job_blocks = soup.select("div.santa--mb-20.ng-star-inserted")
+
+    jobs = []
+    for block in job_blocks:
+        title = block.select_one("h2.santa-typo-h3")
+        salary = block.select_one("span.ng-star-inserted")
+        url_tag = block.select_one("a.card")
+
+        jobs.append({
+            "title": title.text.strip() if title else "No title",
+            "salary": salary.text.strip() if salary else "No salary",
+            "url": "https://robota.ua" + url_tag["href"] if url_tag and url_tag.has_attr("href") else "No URL",
+            "details": ", ".join(span.text.strip() for span in block.select("span.ng-star-inserted")[1:]) or "No details",
+        })
+
+    save_jobs(jobs, source="robota.ua")
+
+
+def main():
+    start = time.perf_counter()
+
+    scrape_djinni()
+    scrape_work_ua()
+    asyncio.run(scrape_robota_ua())
+
+    end = time.perf_counter()
+    print(f"⏱️ Completed in {end - start:.2f} seconds")
 
 
 if __name__ == "__main__":
-    get_jobs_djinni()
-    get_jobs_work_ua()
-
-
-
-
+    main()
