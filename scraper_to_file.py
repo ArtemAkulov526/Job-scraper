@@ -1,12 +1,15 @@
-import requests, time, asyncio
+import requests, asyncio, time
 from bs4 import BeautifulSoup
+from datetime import datetime
 from playwright.async_api import async_playwright
 
-OUTPUT_FILE = "test.txt"
+OUTPUT_FILE = "jobs_junior.txt"
 HEADERS = {'User-Agent': "Mozilla/5.0 (X11; CrOS x86_64 8172.45.0)"}
 
 def save_jobs(jobs: list, source: str, mode: str = "a"):
     with open(OUTPUT_FILE, mode, encoding="utf-8") as f:
+        now = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+        f.write(f"Jobs scraped at: {now}\n")
         for job in jobs:
             f.write(f"Title: {job.get('title')}\n")
             f.write(f"Salary: {job.get('salary')}\n")
