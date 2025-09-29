@@ -1,10 +1,18 @@
-import asyncio, aiohttp, time
+import asyncio 
+import aiohttp 
+import time
+import logging
+from typing import List, Dict
 from bs4 import BeautifulSoup
 from models import db, JobPosting
 from playwright.async_api import async_playwright
 from app import app  
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 HEADERS = {'User-Agent': "Mozilla/5.0 (X11; CrOS x86_64 8172.45.0)"}
+DJINNI_URL = "https://djinni.co/jobs/?primary_keyword=Python&exp_level=no_exp"
+WORK_UA_URL = "https://www.work.ua/jobs-remote-junior+python+developer/"
+ROBOTA_URL = "https://robota.ua/zapros/python/ukraine/params;scheduleIds=3;experienceType=true"
 
 async def fetch(session, url, headers):
     async with session.get(url, headers=headers) as response:
@@ -24,11 +32,10 @@ def save_jobs_to_db(jobs):
             db.session.rollback()
             print(f" Database error: {e}")
 
-async def get_jobs_djinni():
-    URL = "https://djinni.co/jobs/?primary_keyword=Python&exp_level=no_exp"
-
-    async with aiohttp.ClientSession() as session:
-        html = await fetch(session, URL, headers=HEADERS)
+async def get_jobs_djinni(session: aiohttp.ClientSession)-> List[Dict[str, str]]:
+    html = await fetch(session, DJINNI_URL, headers=HEADERS)
+    if not html:
+        return []
     
     soup = BeautifulSoup(html, 'html5lib')
     job = soup.find('main', attrs={'id': 'jobs_main'})
@@ -47,19 +54,17 @@ async def get_jobs_djinni():
             "description": row.find("span", class_="js-truncated-text").text.strip() if row.find("span", class_="js-truncated-text") else "No description"
         }
         jobs.append(job_data)
-    print(f"Scraped {len(jobs)} jobs")
+    logging.info("Scraped %d jobs from Djinni", len(jobs))
     return jobs
 
-async def get_jobs_work_ua():
-    URL = "https://www.work.ua/jobs-remote-junior+python+developer/"
-
-    async with aiohttp.ClientSession() as session:
-        html = await fetch(session, URL, headers=HEADERS)
+async def get_jobs_work_ua(session: aiohttp.ClientSession)-> List[Dict[str, str]]:
+    html = await fetch(session, WORK_UA_URL, headers=HEADERS)
+    if not html:
+        return []
     
     soup = BeautifulSoup(html, 'html5lib')
     job = soup.find('div', attrs={'id': 'pjax-jobs-list'})
     if not job:
-        print(" Work.ua main block not found")
         return []
     
     jobs = []
@@ -73,18 +78,16 @@ async def get_jobs_work_ua():
         }
         
         jobs.append(job_data)
-    print(f"Scraped {len(jobs)} jobs")
+    logging.info("Scraped %d jobs from Work.ua", len(jobs))
     return jobs
 
 
-async def get_jobs_robota_ua():
-    url = "https://robota.ua/zapros/python/ukraine/params;scheduleIds=3;experienceType=true"
-
+async def get_jobs_robota_ua()-> List[Dict[str, str]]:
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         await page.set_extra_http_headers(HEADERS)
-        await page.goto(url)
+        await page.goto(ROBOTA_URL)
 
         previous_height = 0
         for _ in range(5):
@@ -115,23 +118,25 @@ async def get_jobs_robota_ua():
             "details": ", ".join(span.text.strip() for span in block.select("span.ng-star-inserted")[1:]) or "No details",
         })
 
+    logging.info("Scraped %d jobs from Robota.ua", len(jobs))
     return jobs
 
 async def main():
     start = time.perf_counter()
-
-    djinni_jobs, work_ua_jobs, robota_jobs = await asyncio.gather(
+    async with aiohttp.ClientSession() as session:
+            djinni_jobs, work_ua_jobs, robota_jobs = await asyncio.gather(
         get_jobs_djinni(),
         get_jobs_work_ua(),
         get_jobs_robota_ua()
     )
 
-    save_jobs_to_db(djinni_jobs)
-    save_jobs_to_db(work_ua_jobs)
-    save_jobs_to_db(robota_jobs)
+
+
+    for job_list in [djinni_jobs, work_ua_jobs, robota_jobs]:
+        save_jobs_to_db(job_list)
     
     end = time.perf_counter()
-    print(f"⏱️ Async version completed in {end - start:.2f} seconds")
+    logging.info("Async scraping completed in %.2f seconds", end - start)
 
 if __name__ == "__main__":
     asyncio.run(main())

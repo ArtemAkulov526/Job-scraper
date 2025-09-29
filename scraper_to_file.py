@@ -1,10 +1,18 @@
-import requests, asyncio, time
+import requests
+import asyncio 
+import time
+import logging
+from typing import List, Dict
 from bs4 import BeautifulSoup
 from datetime import datetime
 from playwright.async_api import async_playwright
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 OUTPUT_FILE = "jobs_junior.txt"
 HEADERS = {'User-Agent': "Mozilla/5.0 (X11; CrOS x86_64 8172.45.0)"}
+DJINNI_URL = "https://djinni.co/jobs/?primary_keyword=Python&exp_level=no_exp"
+WORK_UA_URL = "https://www.work.ua/jobs-remote-junior+python+developer/"
+ROBOTA_URL = "https://robota.ua/zapros/python/ukraine/params;scheduleIds=3;experienceType=true"
 
 def save_jobs(jobs: list, source: str, mode: str = "a"):
     with open(OUTPUT_FILE, mode, encoding="utf-8") as f:
@@ -20,12 +28,10 @@ def save_jobs(jobs: list, source: str, mode: str = "a"):
                 f.write(f"Description: {job.get('description')}\n")
             f.write(f"Found on: {source}\n")
             f.write("-" * 40 + "\n")
-    print(f" Saved {len(jobs)} jobs from {source}")
+    logging.info("Saved %d jobs from %s", len(jobs), source)
 
-
-def scrape_djinni():
-    url = "https://djinni.co/jobs/?primary_keyword=Python&exp_level=no_exp"
-    r = requests.get(url=url, headers=HEADERS)
+def scrape_djinni() -> List[Dict[str, str]]:
+    r = requests.get(DJINNI_URL, headers=HEADERS)
     soup = BeautifulSoup(r.content, 'html5lib')
 
     jobs = []
@@ -38,12 +44,12 @@ def scrape_djinni():
             "description": row.select_one("span.js-truncated-text").text.strip() if row.select_one("span.js-truncated-text") else "No description"
         })
 
-    save_jobs(jobs, source="Djinni", mode="w")
+    logging.info("Scraped %d jobs from Djinni", len(jobs))
+    return jobs
 
 
-def scrape_work_ua():
-    url = "https://www.work.ua/jobs-remote-junior+python+developer/"
-    r = requests.get(url=url, headers=HEADERS)
+def scrape_work_ua() -> List[Dict[str, str]]:
+    r = requests.get(WORK_UA_URL, headers=HEADERS)
     soup = BeautifulSoup(r.content, 'html5lib')
 
     job_blocks = soup.select("div#pjax-jobs-list div.job-link")
@@ -58,17 +64,16 @@ def scrape_work_ua():
             "description": block.select_one("p.ellipsis-line-3").text.strip() if block.select_one("p.ellipsis-line-3") else "No description"
         })
 
-    save_jobs(jobs, source="Work.ua")
+    logging.info("Scraped %d jobs from work.ua", len(jobs))
+    return jobs
 
 
-async def scrape_robota_ua():
-    url = "https://robota.ua/zapros/python/ukraine/params;scheduleIds=3;experienceType=true"
-
+async def scrape_robota_ua() -> List[Dict[str, str]]:
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         await page.set_extra_http_headers(HEADERS)
-        await page.goto(url)
+        await page.goto(ROBOTA_URL)
 
         previous_height = 0
         for _ in range(5):
@@ -99,18 +104,23 @@ async def scrape_robota_ua():
             "details": ", ".join(span.text.strip() for span in block.select("span.ng-star-inserted")[1:]) or "No details",
         })
 
-    save_jobs(jobs, source="robota.ua")
+    logging.info("Scraped %d jobs from robota.ua", len(jobs))
+    return jobs
 
 
 def main():
     start = time.perf_counter()
 
-    scrape_djinni()
-    scrape_work_ua()
-    asyncio.run(scrape_robota_ua())
+    djinni_jobs = scrape_djinni()
+    work_ua_jobs = scrape_work_ua()
+    robota_jobs = asyncio.run(scrape_robota_ua())
+
+    save_jobs(djinni_jobs, source="Djinni", mode="w")
+    save_jobs(work_ua_jobs, source="Work.ua")
+    save_jobs(robota_jobs, source="Robota.ua")
 
     end = time.perf_counter()
-    print(f"⏱️ Completed in {end - start:.2f} seconds")
+    logging.info("Scraping completed in %.2f seconds", end - start)
 
 
 if __name__ == "__main__":
