@@ -25,12 +25,12 @@ def save_jobs_to_db(jobs):
             if not JobPosting.query.filter_by(url=job_data["url"]).first():
                 job = JobPosting(**job_data)
                 db.session.add(job)
-                print(f"Added job: {job.title}")
+                logging.info("Added job: %s", job_data["title"])
         try:
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            print(f" Database error: {e}")
+            logging.error("Database error: %s", e)
 
 async def get_jobs_djinni(session: aiohttp.ClientSession)-> List[Dict[str, str]]:
     html = await fetch(session, DJINNI_URL, headers=HEADERS)
@@ -124,14 +124,12 @@ async def get_jobs_robota_ua()-> List[Dict[str, str]]:
 async def main():
     start = time.perf_counter()
     async with aiohttp.ClientSession() as session:
-            djinni_jobs, work_ua_jobs, robota_jobs = await asyncio.gather(
-        get_jobs_djinni(),
-        get_jobs_work_ua(),
+        djinni_jobs, work_ua_jobs, robota_jobs = await asyncio.gather(
+        get_jobs_djinni(session),
+        get_jobs_work_ua(session),
         get_jobs_robota_ua()
     )
-
-
-
+            
     for job_list in [djinni_jobs, work_ua_jobs, robota_jobs]:
         save_jobs_to_db(job_list)
     
