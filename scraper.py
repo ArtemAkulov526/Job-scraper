@@ -11,7 +11,7 @@ from app import app
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 HEADERS = {'User-Agent': "Mozilla/5.0 (X11; CrOS x86_64 8172.45.0)"}
 DJINNI_URL = "https://djinni.co/jobs/?primary_keyword=Python&exp_level=no_exp"
-WORK_UA_URL = "https://www.work.ua/jobs-remote-junior+python+developer/"
+WORK_UA_URL = "https://www.work.ua/jobs-remote-junior+python+developer/?experience=1"
 ROBOTA_URL = "https://robota.ua/zapros/python/ukraine/params;scheduleIds=3;experienceType=true"
 
 async def fetch(session, url, headers):
@@ -21,7 +21,6 @@ async def fetch(session, url, headers):
 def save_jobs_to_db(jobs):
     with app.app_context():
         for job_data in jobs:
-            print(f"Checking job: {job_data['url']}")
             if not JobPosting.query.filter_by(url=job_data["url"]).first():
                 job = JobPosting(**job_data)
                 db.session.add(job)

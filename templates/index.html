@@ -12,22 +12,17 @@
             font-family: 'Montserrat', sans-serif;
         }
       </style>
-    <h1>Вакансії</h1>
-    
-    {% if jobs %}
-        <ul>
-            {% for job in jobs %}
-                <li>
-                    <a href="{{ job.url }}" target="_blank"><strong>{{ job.title }}</strong></a><br>
-                    <strong>Зарплата:</strong> {{ job.salary }}<br>
-                    <strong>Умови:</strong> {{ job.details }}<br>
-                    <strong>Опис:</strong> {{ job.description }}<br>
-                </li>
-            {% endfor %}
-        </ul>
-    {% else %}
-        <p>Немає вакансій.</p>
-    {% endif %}
-
+    <h1>Пошук ваших вакансій</h1>
+    <form action="/scrape" method="POST">
+    <p>Select a job position:</p>
+    <button type="submit" name="position" value="Python">Python</button>
+    <button type="submit" name="position" value="JavaScript">JavaScript</button>
+    <button type="submit" name="position" value="Fullstack">FullStack</button>
+    <button type="submit" name="position" value="PHP">PHP</button>
+    <button type="submit" name="position" value="Embedded">Embedded</button>
+    <button type="submit" name="position" value="QA">QA</button>
+    <button type="submit" name="position" value="Sales">Sales</button>
+    <button type="submit" name="position" value="Support">Customer/Techical Support</button>
+    </form>
 </body>
 </html>

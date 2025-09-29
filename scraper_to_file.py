@@ -2,19 +2,54 @@ import requests
 import asyncio 
 import time
 import logging
+import json
 from typing import List, Dict
 from bs4 import BeautifulSoup
 from datetime import datetime
 from playwright.async_api import async_playwright
 
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-OUTPUT_FILE = "jobs_junior.txt"
+OUTPUT_FILE = "jobs_junior.json"
 HEADERS = {'User-Agent': "Mozilla/5.0 (X11; CrOS x86_64 8172.45.0)"}
 DJINNI_URL = "https://djinni.co/jobs/?primary_keyword=Python&exp_level=no_exp"
-WORK_UA_URL = "https://www.work.ua/jobs-remote-junior+python+developer/"
+WORK_UA_URL = "https://www.work.ua/jobs-remote-junior+python+developer/?experience=1"
 ROBOTA_URL = "https://robota.ua/zapros/python/ukraine/params;scheduleIds=3;experienceType=true"
 
-def save_jobs(jobs: list, source: str, mode: str = "a"):
+def save_jobs(jobs: List[Dict], source: str, mode: str = "a"):
+    """
+    Save scraped jobs to a JSON file with timestamp and source info.
+
+    :param jobs: List of job dictionaries
+    :param source: Source site name (e.g., 'Djinni')
+    :param mode: File mode, 'a' for append, 'w' for overwrite
+    """
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    data_to_save = {
+        "scraped_at": now,
+        "source": source,
+        "jobs": jobs
+    }
+
+    if mode == "a":
+        try:
+            with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
+                existing_data = json.load(f)
+            if not isinstance(existing_data, list):
+                existing_data = [existing_data]
+        except (FileNotFoundError, json.JSONDecodeError):
+            existing_data = []
+        existing_data.append(data_to_save)
+        final_data = existing_data
+    else:
+        final_data = [data_to_save]
+
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+        json.dump(final_data, f, ensure_ascii=False, indent=4)
+
+    logging.info("Saved %d jobs from %s", len(jobs), source)
+
+def save_jobs_txt(jobs: list, source: str, mode: str = "a"):
     with open(OUTPUT_FILE, mode, encoding="utf-8") as f:
         now = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
         f.write(f"Jobs scraped at: {now}\n")
@@ -30,8 +65,8 @@ def save_jobs(jobs: list, source: str, mode: str = "a"):
             f.write("-" * 40 + "\n")
     logging.info("Saved %d jobs from %s", len(jobs), source)
 
-def scrape_djinni() -> List[Dict[str, str]]:
-    r = requests.get(DJINNI_URL, headers=HEADERS)
+def scrape_djinni(url) -> List[Dict[str, str]]:
+    r = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(r.content, 'html5lib')
 
     jobs = []
@@ -48,8 +83,8 @@ def scrape_djinni() -> List[Dict[str, str]]:
     return jobs
 
 
-def scrape_work_ua() -> List[Dict[str, str]]:
-    r = requests.get(WORK_UA_URL, headers=HEADERS)
+def scrape_work_ua(url) -> List[Dict[str, str]]:
+    r = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(r.content, 'html5lib')
 
     job_blocks = soup.select("div#pjax-jobs-list div.job-link")
@@ -68,12 +103,12 @@ def scrape_work_ua() -> List[Dict[str, str]]:
     return jobs
 
 
-async def scrape_robota_ua() -> List[Dict[str, str]]:
+async def scrape_robota_ua(url) -> List[Dict[str, str]]:
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         await page.set_extra_http_headers(HEADERS)
-        await page.goto(ROBOTA_URL)
+        await page.goto(url)
 
         previous_height = 0
         for _ in range(5):
@@ -121,7 +156,6 @@ def main():
 
     end = time.perf_counter()
     logging.info("Scraping completed in %.2f seconds", end - start)
-
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Job Listings</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Job Listings</h1>
+
+        {% if jobs %}
+            {% for batch in jobs %}
+                <h2>Jobs from: {{ batch.source }} </h2>
+                <div class="job-list">
+                    {% for job in batch.jobs %}
+                        <div class="job-card">
+                            <h3>{{ job.title }}</h3>
+                            <p><strong>Salary:</strong> {{ job.salary }}</p>
+                            <p><strong>Details:</strong> {{ job.details }}</p>
+                            <p>{{ job.description }}</p>
+                            <a href="{{ job.url }}" target="_blank">Apply →</a>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>No jobs found. Please run scraping first.</p>
+        {% endif %}
+    </div>
+</body>
+</html>
